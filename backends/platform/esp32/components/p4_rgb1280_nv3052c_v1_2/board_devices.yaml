@@ -1,0 +1,155 @@
+# Devices for p4_rgb1280_nv3052c_v1_2
+# Devices are initialized in the order listed here.
+devices:
+  # Power preparation. The application initialises this device by name before the LCD and Wi-Fi
+  # (it is skipped on boards without a device called panel_power).
+  # Implemented in panel_power.c (CUSTOM_DEVICE_IMPLEMENT).
+  # - PIN_PWR_EN (GPIO 20) is the enable pin of the main voltage regulator: high keeps the whole board
+  #   powered. The firmware never drives it low, that would switch the board off.
+  # - LDO channel 4 (LDO_VO4) supplies the IO power domain VDD_IO_5, which covers GPIO 39..48. Without
+  #   it these pins only swing about 1.1 V instead of 3.3 V: the green data lines G3..G5 (GPIO 48, 47,
+  #   46) and R0 (GPIO 45) are in this domain, so the green was (almost) missing. The Espressif P4
+  #   Function EV board powers its SD card pins (GPIO 39..44) from LDO_VO4 in the same way.
+  # - The panel's SPI lines (SCK GPIO 5, MOSI GPIO 7) are driven low from here on: the panel's chip
+  #   select is always asserted, noise on the lines would shift its 9-bit word alignment.
+  # - The GT911 touch controller is reset here (RST GPIO 29, INT GPIO 26, INT low = I2C address
+  #   0x5D): the Board Manager probes its address before the driver resets it, and a GT911 that has
+  #   not been reset since the power-up does not answer. -1: no reset.
+  # - No reset pulse here (rst_gpio -1): lcd_spi_init resets the panel (and the C6) right before the init.
+  - name: panel_power
+    type: custom
+    config:
+      ldo_chan_id: 4
+      ldo_voltage_mv: 3300
+      pwr_en_gpio: 20
+      pwr_en_level: 1         # level that keeps the board powered
+      spi_sck_gpio: 5         # parked low, same pins as lcd_spi_init (-1: do not park)
+      spi_mosi_gpio: 7
+      touch_rst_gpio: 29      # GT911 reset, same pins as lcd_touch (-1: no reset)
+      touch_int_gpio: 26
+      settle_ms: 200          # wait after switching the power on
+      rst_gpio: -1            # optional reset pulse (not used, see above)
+      rst_low_ms: 150         # reset pulse width
+      rst_wait_ms: 150        # wait after the reset pulse
+
+  # 9-bit bit-banged SPI init of the NV3052C.
+  # Implemented in lcd_spi_init.c (CUSTOM_DEVICE_IMPLEMENT).
+  # The reset line (GPIO 54) is shared with the C6 co-processor: the reset pulse of this device resets
+  # both. ScummVM does not use Wi-Fi, so nothing resets the line afterwards.
+  - name: lcd_spi_init
+    type: custom
+    depends_on: panel_power
+    config:
+      spi_sck_gpio: 5
+      spi_mosi_gpio: 7        # no CS line: CS is always asserted on the panel
+      spi_half_period_us: 5   # half clock period of the bit-banged SPI (1 in the original firmware)
+      hold_lines_low: 1       # keep SCK and MOSI driven low after the init (0: release them)
+      lcd_rst_gpio: 54        # panel reset, shared with the C6 enable
+      pclk_gpio: 4            # reset before the RGB peripheral takes it over
+
+  # 720x1280 RGB565 panel, sync-less (HSYNC/VSYNC not connected), panel already initialized by lcd_spi_init.
+  # v_res = 1280 exceeds what the LCD controller can count in one frame, so every frame is scanned out
+  # in two halves of 640 lines (CONFIG_LCD_RGB_SPLIT_FRAME, see components/esp_lcd and README.md).
+  - name: display_lcd
+    type: display_lcd
+    version: 1.0.0
+    sub_type: rgb
+    chip: generic_rgb
+    depends_on: lcd_spi_init
+    config:
+      swap_xy: false
+      mirror_y: false
+      mirror_x: false
+      invert_color: false
+      need_reset: true
+      bits_per_pixel: 16
+      rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+      data_endian: LCD_RGB_DATA_ENDIAN_BIG
+      frame_format: RGB565_LE
+      rgb_panel_config:
+        clk_src: LCD_CLK_SRC_DEFAULT
+        data_width: 16
+        in_color_format: LCD_COLOR_FMT_RGB565
+        out_color_format: LCD_COLOR_FMT_RGB565
+        num_fbs: 2
+        # Bounce buffers are required (28800 px = 40 lines): the frame is fed to the LCD from them
+        bounce_buffer_size_px: 28800
+        dma_burst_size: 64
+        hsync_gpio_num: -1
+        vsync_gpio_num: -1
+        de_gpio_num: 3
+        pclk_gpio_num: 4
+        disp_gpio_num: -1
+        # DATA0..DATA15: B0-B4, G0-G5, R0-R4
+        data_gpio_nums: [2, 1, 0, 53, 52, 51, 50, 49, 48, 47, 46, 45, 34, 33, 32, 31]
+        user_fbs_func: ""
+        timings:
+          pclk_hz: 40000000
+          h_res: 720
+          v_res: 1280
+          hsync_pulse_width: 10
+          hsync_back_porch: 36
+          hsync_front_porch: 46
+          vsync_pulse_width: 5
+          vsync_back_porch: 5
+          vsync_front_porch: 16
+          flags:
+            hsync_idle_low: true
+            vsync_idle_low: true
+            de_idle_high: false
+            pclk_active_neg: true
+            pclk_idle_high: false
+        flags:
+          disp_active_low: false
+          refresh_on_demand: false
+          fb_in_psram: true
+          double_fb: false
+          no_fb: false
+          bb_invalidate_cache: false
+
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    peripherals:
+      - ledc_name: ledc_backlight
+
+  # GT911 touch controller on the I2C bus i2c_master (board_peripherals.yaml): SDA GPIO 28, SCL GPIO 27,
+  # RST GPIO 29, INT GPIO 26. The GT911 driver uses RST and INT to select its I2C address, so both
+  # candidates are listed (8-bit values, 7-bit 0x5D / 0x14). The application (app_touch.c) polls it and
+  # sends the contacts to the host over UDP; the factory function is in setup_device.c.
+  # If the touch is mirrored against the picture, flip mirror_x / mirror_y (or swap_xy) here.
+  - name: lcd_touch
+    chip: gt911
+    type: lcd_touch
+    sub_type: i2c
+    version: default
+    dependencies:
+      espressif/esp_lcd_touch_gt911: "*"
+    config:
+      io_i2c_config:
+        lcd_cmd_bits: 16
+      touch_config:
+        x_max: 720
+        y_max: 1280
+        rst_gpio_num: 29
+        int_gpio_num: 26
+        flags:
+          swap_xy: false
+          mirror_x: false
+          mirror_y: false
+    peripherals:
+      - i2c_name: i2c_master
+        i2c_addr: [0xBA, 0x28]
+
+  # ---------------------------------------------------------------------------
+  # TODO: audio. Left out until the codec, I2C/I2S pins and PA enable are known.
+  # The app only enables UAC audio when audio_dac and audio_adc exist.
+  # ---------------------------------------------------------------------------
+  # - name: audio_dac
+  #   chip: TBD
+  #   type: audio_codec
+  #   ...
+  # - name: audio_adc
+  #   chip: TBD
+  #   type: audio_codec
+  #   ...

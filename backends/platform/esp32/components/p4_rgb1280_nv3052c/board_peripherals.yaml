@@ -1,0 +1,28 @@
+# Peripherals for p4_rgb1280_nv3052c
+peripherals:
+  # LCD backlight PWM (active high), 100 kHz, 8-bit
+  - name: ledc_backlight
+    type: ledc
+    version: default
+    config:
+      gpio_num: 9
+      speed_mode: LEDC_LOW_SPEED_MODE
+      channel: 0
+      timer_sel: 0
+      freq_hz: 100000
+      duty_resolution: LEDC_TIMER_8_BIT
+      duty: 0
+
+  # TODO (touch + audio): I2C bus for the GT911 touch controller and the audio codec.
+  # Pins are not known yet. The test firmware enabled the internal pull-ups,
+  # so check whether the board has external pull-ups before finalizing.
+  # - name: i2c_master
+  #   type: i2c
+  #   role: master
+  #   config:
+  #     port: 0
+  #     pins:
+  #       sda: TBD
+  #       scl: TBD
+
+  # TODO (audio): I2S peripherals (i2s_audio_out / i2s_audio_in) and PA enable GPIO.

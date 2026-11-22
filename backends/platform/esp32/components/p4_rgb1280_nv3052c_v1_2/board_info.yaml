@@ -1,0 +1,5 @@
+board: p4_rgb1280_nv3052c_v1_2
+chip: esp32p4
+version: "1.0.0"
+description: "ESP32-P4 board v1.2 with 720x1280 NV3052C RGB565 panel (bit-banged 9-bit 3-wire SPI init, split frame scanout)"
+manufacturer: "custom"

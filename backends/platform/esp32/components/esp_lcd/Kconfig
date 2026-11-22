@@ -1,0 +1,78 @@
+menu "ESP-Driver:LCD Controller Configurations"
+
+    if SOC_LCD_RGB_SUPPORTED
+        config LCD_RGB_ISR_IRAM_SAFE
+            bool "RGB LCD ISR IRAM-Safe"
+            select GDMA_ISR_HANDLER_IN_IRAM # bounce buffer mode relies on GDMA EOF interrupt
+            select ESP_PERIPH_CTRL_FUNC_IN_IRAM
+            default n
+            help
+                Ensure the LCD interrupt is IRAM-Safe by allowing the interrupt handler to be
+                executable when the cache is disabled (e.g. SPI Flash write).
+                If you want the LCD driver to keep flushing the screen even when cache ops disabled,
+                you can enable this option. Note, this will also increase the IRAM usage.
+
+        config LCD_RGB_RESTART_IN_VSYNC
+            bool "Always restart RGB LCD transmission in VSYNC"
+            default n
+            help
+                Reset the GDMA channel every VBlank to stop permanent desyncs from happening.
+                Only need to enable it when in your application, the DMA can't deliver data
+                as fast as the LCD consumes it.
+
+        config LCD_RGB_SPLIT_FRAME
+            bool "Scan out every RGB frame in two halves (vertical resolution workaround)"
+            depends on IDF_TARGET_ESP32P4
+            default n
+            help
+                The LCD controller can only count a limited number of lines per frame. With this option
+                every frame is scanned out as two passes of v_res / 2 lines each: the interrupt handlers
+                reprogram the vertical timing and restart the DMA between the halves, without extra
+                sync lines. The split position is always v_res / 2, so v_res must be even.
+                Requires a frame buffer, stream mode and no bounce buffer (bounce_buffer_size_px = 0).
+
+        config LCD_RGB_SPLIT_FIFO_OFFSET
+            int "DMA read offset inside each half (bytes)"
+            depends on LCD_RGB_SPLIT_FRAME
+            range 0 1024
+            default 110
+            help
+                Empirical value that avoids glitches at the start of each half. It depends on the
+                panel timing and has to be tuned per panel.
+    endif # SOC_LCD_RGB_SUPPORTED
+
+    if SOC_MIPI_DSI_SUPPORTED
+        config LCD_DSI_ISR_HANDLER_IN_IRAM
+            bool "Place DSI ISR handler in IRAM to reduce latency"
+            default y
+            select LCD_DSI_OBJ_FORCE_INTERNAL
+            help
+                Place DSI ISR handler in IRAM to reduce latency caused by cache miss.
+
+        config LCD_DSI_ISR_CACHE_SAFE
+            bool "Allow DSI ISR to execute when cache is disabled" if !SPI_FLASH_AUTO_SUSPEND
+            select LCD_DSI_ISR_HANDLER_IN_IRAM
+            select DW_GDMA_ISR_IRAM_SAFE # relies on DW_GDMA Full trans done interrupt
+            default n
+            help
+                Enable this option to allow the DSI Interrupt Service Routine (ISR)
+                to execute even when the cache is disabled. This can be useful in scenarios where the cache
+                might be turned off, but the DSI functionality is still required to operate correctly.
+
+        config LCD_DSI_OBJ_FORCE_INTERNAL
+            bool
+            default n
+            help
+                This will ensure the DSI driver object will always be allocated in internal RAM.
+    endif # SOC_MIPI_DSI_SUPPORTED
+
+    config LCD_ENABLE_DEBUG_LOG
+        bool "Force enable debug log"
+        default n
+        help
+            If enabled, LCD driver component will:
+            1. ignore the global logging settings
+            2. compile all log messages into the binary
+            3. set the runtime log level to VERBOSE
+            Please enable this option by caution, as it will increase the binary size.
+endmenu

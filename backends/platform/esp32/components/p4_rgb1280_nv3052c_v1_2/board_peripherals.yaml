@@ -1,0 +1,29 @@
+# Peripherals for p4_rgb1280_nv3052c_v1_2
+peripherals:
+  # LCD backlight PWM (active high), 100 kHz, 8-bit
+  - name: ledc_backlight
+    type: ledc
+    version: default
+    config:
+      gpio_num: 8
+      speed_mode: LEDC_LOW_SPEED_MODE
+      channel: 0
+      timer_sel: 0
+      freq_hz: 100000
+      duty_resolution: LEDC_TIMER_8_BIT
+      duty: 0
+
+  # I2C bus of the GT911 touch controller (RST on GPIO 29, INT on GPIO 26, see lcd_touch in
+  # board_devices.yaml). The internal pull-ups are enabled; whether the board also has external
+  # ones has not been checked.
+  - name: i2c_master
+    type: i2c
+    role: master
+    config:
+      port: 0
+      pins:
+        sda: 28
+        scl: 27
+      enable_internal_pullup: true
+
+  # TODO (audio): I2S peripherals (i2s_audio_out / i2s_audio_in) and PA enable GPIO.

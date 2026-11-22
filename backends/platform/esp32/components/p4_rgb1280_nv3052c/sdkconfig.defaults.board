@@ -1,0 +1,12 @@
+# Board defaults for p4_rgb1280_nv3052c (dev board, ScummVM port)
+#
+# Flash size, PSRAM and console come from the project's sdkconfig.defaults. The dev board has a
+# UART console attached, which is the IDF default.
+# If the chip is an ESP32-P4 revision < 3.0, also set CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y.
+CONFIG_SPIRAM=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# RGB driver of components/esp_lcd: the ISR fills the bounce buffers, keep it in IRAM.
+CONFIG_LCD_RGB_ISR_IRAM_SAFE=y
+CONFIG_LCD_RGB_SPLIT_FRAME=y
+CONFIG_LCD_RGB_SPLIT_FIFO_OFFSET=110

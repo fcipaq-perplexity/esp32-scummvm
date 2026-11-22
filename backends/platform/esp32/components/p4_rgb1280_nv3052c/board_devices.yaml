@@ -1,0 +1,132 @@
+# Devices for p4_rgb1280_nv3052c
+# Devices are initialized in the order listed here.
+devices:
+  # Panel supply: LDO channel of the P4. The application initialises this device by name before
+  # Wi-Fi starts (it is skipped on boards without a device called panel_power).
+  # Implemented in panel_power.c (CUSTOM_DEVICE_IMPLEMENT).
+  - name: panel_power
+    type: custom
+    config:
+      ldo_chan_id: 4          # LDO_VO4 at 3.3 V
+      ldo_voltage_mv: 3300
+      settle_ms: 200          # wait for the rail to settle
+
+  # 9-bit bit-banged SPI init of the NV3052C.
+  # Implemented in lcd_spi_init.c (CUSTOM_DEVICE_IMPLEMENT).
+  # The panel's reset line (GPIO 54) is shared with the C6 co-processor. ScummVM does not use Wi-Fi,
+  # so nothing else pulses it: the reset pulse is given here, right before the init sequence (this
+  # also resets the unused C6, which is harmless).
+  - name: lcd_spi_init
+    type: custom
+    depends_on: panel_power
+    config:
+      spi_sck_gpio: 7
+      spi_mosi_gpio: 8        # no CS line: CS is always asserted on the panel
+      lcd_rst_gpio: 54        # shared with the C6, see above
+      pclk_gpio: 30           # reset before the RGB peripheral takes it over
+
+  # 720x1280 RGB565 panel, sync-less (HSYNC/VSYNC not connected), panel already initialized by lcd_spi_init.
+  # v_res = 1280 exceeds what the LCD controller can count in one frame, so every frame is scanned out
+  # in two halves of 640 lines (CONFIG_LCD_RGB_SPLIT_FRAME, see components/esp_lcd and README.md).
+  - name: display_lcd
+    type: display_lcd
+    version: 1.0.0
+    sub_type: rgb
+    chip: generic_rgb
+    depends_on: lcd_spi_init
+    config:
+      swap_xy: false
+      mirror_y: false
+      mirror_x: false
+      invert_color: false
+      need_reset: true
+      bits_per_pixel: 16
+      rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+      data_endian: LCD_RGB_DATA_ENDIAN_BIG
+      frame_format: RGB565_LE
+      rgb_panel_config:
+        clk_src: LCD_CLK_SRC_DEFAULT
+        data_width: 16
+        in_color_format: LCD_COLOR_FMT_RGB565
+        out_color_format: LCD_COLOR_FMT_RGB565
+        num_fbs: 2
+        # Bounce buffers are required (28800 px = 40 lines): the frame is fed to the LCD from them
+        bounce_buffer_size_px: 28800
+        dma_burst_size: 64
+        hsync_gpio_num: -1
+        vsync_gpio_num: -1
+        de_gpio_num: 31
+        pclk_gpio_num: 30
+        disp_gpio_num: -1
+        data_gpio_nums: [5, 4, 3, 2, 1, 0, 53, 52, 51, 50, 49, 48, 47, 46, 34, 33]
+        user_fbs_func: ""
+        timings:
+          pclk_hz: 40000000
+          h_res: 720
+          v_res: 1280
+          hsync_pulse_width: 10
+          hsync_back_porch: 36
+          hsync_front_porch: 46
+          vsync_pulse_width: 5
+          vsync_back_porch: 5
+          vsync_front_porch: 16
+          flags:
+            hsync_idle_low: true
+            vsync_idle_low: true
+            de_idle_high: false
+            pclk_active_neg: true
+            pclk_idle_high: false
+        flags:
+          disp_active_low: false
+          refresh_on_demand: false
+          fb_in_psram: true
+          double_fb: false
+          no_fb: false
+          bb_invalidate_cache: false
+
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    peripherals:
+      - ledc_name: ledc_backlight
+
+  # ---------------------------------------------------------------------------
+  # TODO: touch (GT911). Left out until the I2C/INT/RST pins are known.
+  # The app only enables HID touch when a device named lcd_touch exists.
+  # Note: the panel orientation is set via MADCTL (0x36 = 0x0A), so mirror_x/mirror_y
+  # probably need tuning.
+  # ---------------------------------------------------------------------------
+  # - name: lcd_touch
+  #   chip: gt911
+  #   type: lcd_touch
+  #   sub_type: i2c
+  #   version: default
+  #   dependencies:
+  #     espressif/esp_lcd_touch_gt911: "*"
+  #   config:
+  #     io_i2c_config:
+  #       lcd_cmd_bits: 16
+  #     touch_config:
+  #       x_max: 720
+  #       y_max: 1280
+  #       rst_gpio_num: TBD
+  #       int_gpio_num: TBD
+  #       flags:
+  #         mirror_x: false
+  #         mirror_y: false
+  #   peripherals:
+  #     - i2c_name: i2c_master
+  #       i2c_addr: [0xBA, 0x28]   # GT911 8-bit addresses (7-bit 0x5D / 0x14)
+
+  # ---------------------------------------------------------------------------
+  # TODO: audio. Left out until the codec, I2C/I2S pins and PA enable are known.
+  # The app only enables UAC audio when audio_dac and audio_adc exist.
+  # ---------------------------------------------------------------------------
+  # - name: audio_dac
+  #   chip: TBD
+  #   type: audio_codec
+  #   ...
+  # - name: audio_adc
+  #   chip: TBD
+  #   type: audio_codec
+  #   ...

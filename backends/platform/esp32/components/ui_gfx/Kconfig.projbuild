@@ -1,0 +1,19 @@
+menu "On-board UI"
+
+    config EXTEND_SCREEN_UI_TIMEOUT_S
+        int "Close the menu after this many seconds without touch (0 = never)"
+        default 30
+        range 0 600
+        help
+            While the menu is open the video is paused. It closes by itself after this time
+            without touch (not while a finger is down).
+
+    config EXTEND_SCREEN_POWER_EN_GPIO
+        int "GPIO that keeps the board powered, driven low by Turn off (-1 = none)"
+        default 20
+        range -1 54
+        help
+            Board v1.2: GPIO 20 is the enable pin of the main voltage regulator. Turn off drives
+            it low. If the board stays powered (for example from USB) the menu comes back.
+
+endmenu
