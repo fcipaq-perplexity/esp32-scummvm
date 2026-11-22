@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_vfs_fat.h"
+#include "esp_heap_caps.h"
 #include "driver/sdmmc_host.h"
 #include "blkcache.h"
 #include "esp_check.h"
@@ -27,6 +28,8 @@
 #include "sdmmc_cmd.h"
 
 static const char *TAG = "mmc";
+
+#define SD_DMA_BUF_SIZE (32 * 1024)
 
 static sdmmc_card_t card;
 static blkcache_handle_t *bc;
@@ -75,6 +78,16 @@ bool sdcard_mount_blkcache(const char *mountpoint, int files) {
 	sdmmc_host_t host = SDMMC_HOST_DEFAULT();
 	host.slot = SDMMC_HOST_SLOT_0;
 	host.max_freq_khz =	 SDMMC_FREQ_52M;
+	/* Writes come from FATFS buffers that are not cache line aligned. Give the driver a fixed
+	 * PSRAM bounce buffer (the SDMMC DMA reaches PSRAM if it is aligned to the 128 byte cache
+	 * line), otherwise it allocates one per transfer in internal RAM, which is used up by the
+	 * LCD bounce buffers and ScummVM. Reads land in the aligned blkcache blocks directly. */
+	static void *s_sd_dma_buf;
+	if (!s_sd_dma_buf) {
+		s_sd_dma_buf = heap_caps_aligned_calloc(128, 1, SD_DMA_BUF_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+	}
+	host.dma_aligned_buffer = s_sd_dma_buf;
+	host.unaligned_multi_block_rw_max_chunk_size = SD_DMA_BUF_SIZE / 512;
 	const sdmmc_slot_config_t slot_config = {
 		/* SD card is connected to Slot 0 pins. Slot 0 uses IO MUX, so not specifying the pins here */
 		.cd = SDMMC_SLOT_NO_CD,

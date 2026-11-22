@@ -26,6 +26,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "posixesp-fs-factory.h"
 
 #define TAG "main"
@@ -255,6 +256,13 @@ void main_task(void *param) {
 	g_system->destroy();
 }
 
+static void log_internal_heap(const char *when) {
+	ESP_LOGI(TAG, "Internal RAM %s: %u bytes free (DMA capable %u, largest block %u)", when,
+		(unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+		(unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA),
+		(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));
+}
+
 int app_main() {
 	//Keep the board powered after the power button is released
 	tablet_power_hold();
@@ -265,6 +273,7 @@ int app_main() {
 		return 0;
 	}
 
+	log_internal_heap("after LCD init");
 	bool sd_ok=sdcard_mount_blkcache("/sdcard", 15);
 	if (sd_ok) tablet_settings_load();
 	tablet_settings_apply();		//backlight on
@@ -274,6 +283,7 @@ int app_main() {
 	ret=tablet_touch_init();
 	if (ret!=ESP_OK) ESP_LOGW(TAG, "No touch input (%s)", esp_err_to_name(ret));
 	tablet_button_init();
+	log_internal_heap("before ScummVM");
 
 	if (!sd_ok) {
 		ESP_LOGE(TAG, "ScummVM needs an SD card with the scummvm folder, halted");

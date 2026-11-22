@@ -21,6 +21,10 @@
 #include <string.h>
 #include "blkcache.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
+
+//Alignment of the cache blocks: L2 cache line of the ESP32-P4 (PSRAM DMA needs it)
+#define BLKCACHE_DMA_ALIGN 128
 
 /*
 Flow:
@@ -70,7 +74,7 @@ typedef struct {
 	size_t blockno;
 	bool is_valid;
 	bool is_read;
-	uint8_t blkdata[];
+	uint8_t *blkdata;		//cache line aligned, so the SD host can DMA into it directly
 } blk_t;
 
 typedef struct {
@@ -203,8 +207,12 @@ esp_err_t blkcache_init(const blkcache_config_t *cfg, blkcache_handle_t **ret_ha
 	b->blk=calloc(cfg->blkcount, sizeof(blk_t*));
 	if (!b->blk) goto err2;
 	for (int i=0; i<cfg->blkcount; i++) {
-		b->blk[i]=calloc(sizeof(blk_t)+cfg->blksize, 1);
+		b->blk[i]=calloc(1, sizeof(blk_t));
 		if (!b->blk[i]) goto err;
+		//PSRAM, aligned to the cache line: the SDMMC DMA reads straight into it (no internal
+		//DMA bounce buffer, internal RAM is short with the LCD bounce buffers)
+		b->blk[i]->blkdata=heap_caps_aligned_calloc(BLKCACHE_DMA_ALIGN, 1, cfg->blksize, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		if (!b->blk[i]->blkdata) goto err;
 	}
 	b->req_mux=xSemaphoreCreateMutex();
 	b->req_sema=xSemaphoreCreateBinary();
