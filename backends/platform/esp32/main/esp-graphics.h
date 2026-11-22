@@ -76,7 +76,7 @@ public:
 	void setFocusRectangle(const Common::Rect& rect) override {}
 	void clearFocusRectangle() override {}
 
-	void showOverlay(bool inGUI) override { _overlayVisible = true; }
+	void showOverlay(bool inGUI) override { _overlayVisible = true; _overlayDirty = true; }
 	void hideOverlay() override { _overlayVisible = false; }
 	bool isOverlayVisible() const override { return _overlayVisible; }
 	//RGB565 as used in display
@@ -105,8 +105,12 @@ private:
 	Graphics::Surface _surf[2];
 	byte _pal[2][256*3];
 	Common::Rect _dirty[2];
-	bool _overlayVisible;
-	int64_t _last_time_updated;
+	bool _overlayVisible = false;
+	bool _overlayDirty = true;		//overlay changed since it was last shown
+	bool _lastShownOverlay = true;	//last picture sent to the LCD was the overlay (forces a game redraw)
+	int64_t _last_time_updated = 0;
+	int64_t _slowWarnTime = 0;
+	int _slowCount = 0;
 	Graphics::Surface _overlay;
 	uint16_t *_clearBuf = nullptr;
 	int _clearBufSize = 0;

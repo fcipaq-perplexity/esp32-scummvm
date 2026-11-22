@@ -202,9 +202,18 @@ void EspGraphicsManager::unlockScreen() {
 }
 
 void EspGraphicsManager::updateScreen() {
+	//Nothing changed: skip the frame (saves a PPA pass and PSRAM bandwidth the LCD needs)
+	if (_overlayVisible) {
+		if (!_overlayDirty && _lastShownOverlay) return;
+	} else {
+		if (_dirty[_cur_fb].isEmpty() && !_lastShownOverlay) return;
+	}
+
 	//limit to 30fps
 	if ((esp_timer_get_time()-_last_time_updated)<(1000000/30)) return;
 	_last_time_updated=esp_timer_get_time();
+	if (_overlayVisible) _overlayDirty=false;
+	_lastShownOverlay=_overlayVisible;
 
 	uint64_t t=esp_timer_get_time();
 
@@ -231,7 +240,14 @@ void EspGraphicsManager::updateScreen() {
 	}
 	t=esp_timer_get_time()-t;
 	if (t>33000) {
-		ESP_LOGW(TAG, "EspGraphicsManager::updateScreen took %d us!", (int)t);
+		//at most one warning every 5 s, the console must not slow things down further
+		_slowCount++;
+		int64_t now=esp_timer_get_time();
+		if (now-_slowWarnTime>5000000) {
+			ESP_LOGW(TAG, "updateScreen took %d us (%d slow frames in the last 5 s)", (int)t, _slowCount);
+			_slowWarnTime=now;
+			_slowCount=0;
+		}
 	}
 }
 
@@ -276,6 +292,7 @@ void EspGraphicsManager::grabPalette(byte *colors, uint start, uint num) const {
 
 void EspGraphicsManager::copyRectToOverlay(const void *buf, int pitch, int x, int y, int w, int h) {
 	_overlay.copyRectToSurface(buf, pitch, x, y, w, h);
+	_overlayDirty=true;
 }
 
 void EspGraphicsManager::grabOverlay(Graphics::Surface &surface) const {
@@ -291,6 +308,7 @@ int16 EspGraphicsManager::getOverlayWidth() const {
 }
 
 void EspGraphicsManager::clearOverlay() {
+	_overlayDirty=true;
 	//The overlay starts out as the current game picture, scaled like on screen
 	if (_surf[_cur_fb].w>0 && _surf[_cur_fb].h>0) {
 		const uint16_t *pic=toRgb565(_cur_fb, _clearBuf, _clearBufSize, false);

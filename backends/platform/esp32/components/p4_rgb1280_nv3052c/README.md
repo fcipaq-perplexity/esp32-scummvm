@@ -27,7 +27,7 @@ The LCD controller of the ESP32-P4 cannot count 1280 lines in one frame (the ver
 This board requires:
 
 - `CONFIG_LCD_RGB_SPLIT_FRAME=y`, set by `sdkconfig.defaults.board`. The split position is always `v_res / 2`.
-- Bounce buffers are required: `bounce_buffer_size_px` 28800 (40 lines) is known to work, 14400 (20 lines, saves 57.6 KiB of internal RAM) is being tested. Do not set it to 0. The ISR copies the frame from the two PSRAM framebuffers (about 1.8 MB each) into them.
+- Bounce buffers are required: `bounce_buffer_size_px: 28800` (40 lines); 14400 flickers. Do not set it to 0. The ISR copies the frame from the two PSRAM framebuffers (about 1.8 MB each) into them.
 - `CONFIG_LCD_RGB_SPLIT_FIFO_OFFSET`, an empirical DMA read offset in bytes. 110 was tuned for this panel.
 - `CONFIG_LCD_RGB_ISR_IRAM_SAFE=y`, so the interrupt handlers keep running while the flash cache is disabled.
 
