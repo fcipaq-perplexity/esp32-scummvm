@@ -26,7 +26,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include "esp_log.h"
-#include "bsp/esp-bsp.h"
 #include "posixesp-fs-factory.h"
 
 #define TAG "main"
@@ -49,9 +48,12 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_timer.h"
-#include "usb_hid.h"
-#include "hid_keys.h"
+#include "engines/engine.h"
 #include "mmc.h"
+#include "tablet_hw.h"
+#include "tablet_lcd.h"
+#include "tablet_settings.h"
+#include "tablet_ui.h"
 
 class OSystem_esp32 : public ModularMixerBackend, public ModularGraphicsBackend, Common::EventSource {
 public:
@@ -84,12 +86,17 @@ private:
 	bool _mousedown_queued;
 	Common::Point _last_mouse_pos;
 	int64_t _last_ts_time_us;
+	bool _ui_was_active;
+	PauseToken _ui_pause;
 };
 
 OSystem_esp32::OSystem_esp32(bool silenceLogs) :
 	_silenceLogs(silenceLogs) {
 	_fsFactory = new POSIXESPFilesystemFactory();
 	_last_ts_time_us = 0;
+	_was_touched = 0;
+	_mousedown_queued = false;
+	_ui_was_active = false;
 }
 
 OSystem_esp32::~OSystem_esp32() {
@@ -117,101 +124,32 @@ void OSystem_esp32::initBackend() {
 	BaseBackend::initBackend();
 }
 
-//missing codes: backspace, enter (instead of return)
-static int keymap[][3] = {
-	{ KEY_ENTER, Common::KEYCODE_RETURN, Common::ASCII_RETURN },
-	{ KEY_UP, Common::KEYCODE_UP, 0 },
-	{ KEY_DOWN, Common::KEYCODE_DOWN, 0 },
-	{ KEY_LEFT, Common::KEYCODE_LEFT, 0 },
-	{ KEY_RIGHT, Common::KEYCODE_RIGHT, 0 },
-	{ KEY_LEFTSHIFT, Common::KEYCODE_LSHIFT, 0 },
-	{ KEY_RIGHTSHIFT, Common::KEYCODE_RSHIFT, 0 },
-	{ KEY_LEFTCTRL, Common::KEYCODE_LCTRL, 0 },
-	{ KEY_RIGHTCTRL, Common::KEYCODE_RCTRL, 0 },
-	{ KEY_LEFTALT, Common::KEYCODE_LALT, 0 },
-	{ KEY_RIGHTALT, Common::KEYCODE_RALT, 0 },
-	{ KEY_LEFTMETA, Common::KEYCODE_LMETA, 0 },
-	{ KEY_RIGHTMETA, Common::KEYCODE_RMETA, 0 },
-	{ KEY_KP0, Common::KEYCODE_KP0, '0' },
-	{ KEY_KP1, Common::KEYCODE_KP1, '1' },
-	{ KEY_KP2, Common::KEYCODE_KP2, '2' },
-	{ KEY_KP3, Common::KEYCODE_KP3, '3' },
-	{ KEY_KP4, Common::KEYCODE_KP4, '4' },
-	{ KEY_KP5, Common::KEYCODE_KP5, '5' },
-	{ KEY_KP6, Common::KEYCODE_KP6, '6' },
-	{ KEY_KP7, Common::KEYCODE_KP7, '7' },
-	{ KEY_KP8, Common::KEYCODE_KP8, '8' },
-	{ KEY_KP9, Common::KEYCODE_KP9, '9' },
-	{ KEY_HOME, Common::KEYCODE_HOME, 0 },
-	{ KEY_INSERT, Common::KEYCODE_INSERT, 0 },
-	{ KEY_END, Common::KEYCODE_END, 0 },
-	{ KEY_PAGEUP, Common::KEYCODE_PAGEUP, 0 },
-	{ KEY_PAGEDOWN, Common::KEYCODE_PAGEDOWN, 0 },
-	{ KEY_F1, Common::KEYCODE_F1, Common::ASCII_F1 },
-	{ KEY_F2, Common::KEYCODE_F2, Common::ASCII_F2 },
-	{ KEY_F3, Common::KEYCODE_F3, Common::ASCII_F3 },
-	{ KEY_F4, Common::KEYCODE_F4, Common::ASCII_F4 },
-	{ KEY_F5, Common::KEYCODE_F5, Common::ASCII_F5 },
-	{ KEY_F6, Common::KEYCODE_F6, Common::ASCII_F6 },
-	{ KEY_F7, Common::KEYCODE_F7, Common::ASCII_F7 },
-	{ KEY_F8, Common::KEYCODE_F8, Common::ASCII_F8 },
-	{ KEY_F9, Common::KEYCODE_F9, Common::ASCII_F9 },
-	{ KEY_F10, Common::KEYCODE_F10, Common::ASCII_F10 },
-	{ KEY_F11, Common::KEYCODE_F11, Common::ASCII_F11 },
-	{ KEY_F12, Common::KEYCODE_F12, Common::ASCII_F12 },
-	{ KEY_F13, Common::KEYCODE_F13, 0 },
-	{ KEY_F14, Common::KEYCODE_F14, 0 },
-	{ KEY_F15, Common::KEYCODE_F15, 0 },
-	{ KEY_A, Common::KEYCODE_a, 'a' },
-	{ KEY_B, Common::KEYCODE_b, 'b' },
-	{ KEY_C, Common::KEYCODE_c, 'c' },
-	{ KEY_D, Common::KEYCODE_d, 'd' },
-	{ KEY_E, Common::KEYCODE_e, 'e' },
-	{ KEY_F, Common::KEYCODE_f, 'f' },
-	{ KEY_G, Common::KEYCODE_g, 'g' },
-	{ KEY_H, Common::KEYCODE_h, 'h' },
-	{ KEY_I, Common::KEYCODE_i, 'i' },
-	{ KEY_J, Common::KEYCODE_j, 'j' },
-	{ KEY_K, Common::KEYCODE_k, 'k' },
-	{ KEY_L, Common::KEYCODE_l, 'l' },
-	{ KEY_M, Common::KEYCODE_m, 'm' },
-	{ KEY_N, Common::KEYCODE_n, 'n' },
-	{ KEY_O, Common::KEYCODE_o, 'o' },
-	{ KEY_P, Common::KEYCODE_p, 'p' },
-	{ KEY_Q, Common::KEYCODE_q, 'q' },
-	{ KEY_R, Common::KEYCODE_r, 'r' },
-	{ KEY_S, Common::KEYCODE_s, 's' },
-	{ KEY_T, Common::KEYCODE_t, 't' },
-	{ KEY_U, Common::KEYCODE_u, 'u' },
-	{ KEY_V, Common::KEYCODE_v, 'v' },
-	{ KEY_W, Common::KEYCODE_w, 'w' },
-	{ KEY_X, Common::KEYCODE_x, 'x' },
-	{ KEY_Y, Common::KEYCODE_y, 'y' },
-	{ KEY_Z, Common::KEYCODE_z, 'z' },
-	{ KEY_ESC, Common::KEYCODE_ESCAPE, Common::ASCII_ESCAPE},
-	{ KEY_COMMA, Common::KEYCODE_COMMA, ',' },
-	{ KEY_DOT, Common::KEYCODE_PERIOD, '.' },
-	{ KEY_TAB, Common::KEYCODE_TAB, '\t' },
-	{ KEY_SPACE, Common::KEYCODE_SPACE, ' ' },
-	{ KEY_BACKSPACE, Common::KEYCODE_BACKSPACE, 0 },
-	{ KEY_GRAVE, Common::KEYCODE_BACKQUOTE, '`' },
-	{ KEY_MINUS, Common::KEYCODE_MINUS, '-' },
-	{ KEY_EQUAL, Common::KEYCODE_EQUALS, '=' },
-	{ KEY_LEFTBRACE, Common::KEYCODE_LEFTPAREN, '}' },
-	{ KEY_RIGHTBRACE, Common::KEYCODE_RIGHTPAREN, '{' },
-	{ KEY_BACKSLASH, Common::KEYCODE_BACKSLASH, '\\' },
-	{ KEY_SEMICOLON, Common::KEYCODE_SEMICOLON, ';' },
-	{ KEY_APOSTROPHE, Common::KEYCODE_QUOTE, '\'' },
-	{ KEY_SLASH, Common::KEYCODE_SLASH, '/' },
-	{ KEY_DELETE, Common::KEYCODE_DELETE, 0 },
-	{ 0, 0, 0 }
-};
-
-
 bool OSystem_esp32::pollEvent(Common::Event &event) {
 	((DefaultTimerManager *)getTimerManager())->checkTimers();
 
 	event.type=Common::EVENT_INVALID;
+
+	//The on-board menu (menu button) pauses the engine while it is open
+	bool ui=tablet_ui_active();
+	if (ui!=_ui_was_active) {
+		_ui_was_active=ui;
+		if (ui) {
+			if (g_engine) _ui_pause=g_engine->pauseEngine();
+		} else {
+			_ui_pause.clear();
+		}
+		_mousedown_queued=false;
+		if (ui && _was_touched==1) {
+			//finger was down when the menu opened: release it
+			_was_touched=0;
+			event.type=Common::EVENT_LBUTTONUP;
+			event.mouse=_last_mouse_pos;
+			return true;
+		}
+		_was_touched=0;
+	}
+	if (ui) return false;
+
 	if (_mousedown_queued) {
 		event.type = Common::EVENT_LBUTTONDOWN;
 		_mousedown_queued=false;
@@ -223,6 +161,7 @@ bool OSystem_esp32::pollEvent(Common::Event &event) {
 		Common::Point pos;
 		EspGraphicsManager *gfx=(EspGraphicsManager *)_graphicsManager;
 		int touched=gfx->getTouch(pos);
+		if (touched>2) touched=2;
 		if (touched==1) {
 			if (_was_touched==0) _mousedown_queued=true;
 //			ESP_LOGI(TAG, "ts %d,%d", pos.x, pos.y);
@@ -240,23 +179,6 @@ bool OSystem_esp32::pollEvent(Common::Event &event) {
 		if (event.type!=Common::EVENT_INVALID) return true;
 	}
 
-	hid_ev_t ev;
-	if (usb_hid_receive_hid_event(&ev)) {
-		if (ev.type==HIDEV_EVENT_KEY_DOWN || ev.type==HIDEV_EVENT_KEY_UP) {
-			if (ev.type==HIDEV_EVENT_KEY_DOWN) event.type=Common::EVENT_KEYDOWN;
-			if (ev.type==HIDEV_EVENT_KEY_UP) event.type=Common::EVENT_KEYUP;
-			int i = 0;
-			while (keymap[i][0] != 0) {
-				if (keymap[i][0] == ev.key.keycode) {
-					event.kbd.keycode = static_cast<Common::KeyCode>(keymap[i][1]);
-					event.kbd.ascii = keymap[i][2];
-					//event.kbd.flags |= Common::KBD_SHIFT; _CTRL; _ALT;
-					return true;
-				}
-				i++;
-			}
-		}
-	}
 	return false;
 }
 
@@ -333,19 +255,33 @@ void main_task(void *param) {
 	g_system->destroy();
 }
 
-void usbhidTaskStub(void *param) {
-	usb_hid_task();
-}
-
-
 int app_main() {
-//	bsp_sdcard_mount();
-	sdcard_mount_blkcache("/sdcard", 15);
+	//Keep the board powered after the power button is released
+	tablet_power_hold();
+
+	esp_err_t ret=tablet_lcd_init();
+	if (ret!=ESP_OK) {
+		ESP_LOGE(TAG, "Display init failed (%s), halted", esp_err_to_name(ret));
+		return 0;
+	}
+
+	bool sd_ok=sdcard_mount_blkcache("/sdcard", 15);
+	if (sd_ok) tablet_settings_load();
+	tablet_settings_apply();		//backlight on
+
+	if (tablet_battery_init()==ESP_OK) ESP_LOGI(TAG, "Battery measurement running");
+	if (tablet_ui_init()!=ESP_OK) ESP_LOGW(TAG, "On-board menu not available");
+	ret=tablet_touch_init();
+	if (ret!=ESP_OK) ESP_LOGW(TAG, "No touch input (%s)", esp_err_to_name(ret));
+	tablet_button_init();
+
+	if (!sd_ok) {
+		ESP_LOGE(TAG, "ScummVM needs an SD card with the scummvm folder, halted");
+		return 0;
+	}
 
 	g_system = OSystem_esp32_create(false);
 	assert(g_system);
-
-	xTaskCreatePinnedToCore(usbhidTaskStub, "usbhid", 4096, NULL, 7, NULL, 1);
 
 	int stack_depth=512*1024;
 	StaticTask_t *taskbuf=(StaticTask_t*)calloc(1, sizeof(StaticTask_t));

@@ -25,11 +25,6 @@
 #include "backends/graphics/graphics.h"
 #include "graphics/surface.h"
 #include "esp_timer.h"
-#include "esp_lcd_panel_interface.h"
-#include "esp_lcd_panel_io_interface.h"
-#include "esp_lcd_panel_ops.h"
-#include "driver/ppa.h"
-#include "bsp/touch.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -97,11 +92,13 @@ public:
 	void setMouseCursor(const void *buf, uint w, uint h, int hotspotX, int hotspotY, uint32 keycolor, bool dontScale = false, const Graphics::PixelFormat *format = NULL, const byte *mask = NULL) override {}
 	void setCursorPalette(const byte *colors, uint start, uint num) override {}
 
+	//Number of contacts; pos is the first one in game (or overlay) coordinates
 	int getTouch(Common::Point &pos);
 
 private:
 	static void gfxTaskStub(void *arg);
 	void gfxTask();
+	const uint16_t *toRgb565(int fbno, uint16_t *&buf, int &bufSize, bool dirtyOnly);
 
 	uint _width, _height;
 	Graphics::PixelFormat _format;
@@ -110,11 +107,9 @@ private:
 	Common::Rect _dirty[2];
 	bool _overlayVisible;
 	int64_t _last_time_updated;
-	esp_lcd_panel_handle_t _panel_handle = NULL;
-	esp_lcd_panel_io_handle_t _io_handle = NULL;
-	esp_lcd_touch_handle_t _touch_handle;
-	ppa_client_handle_t _ppa;
 	Graphics::Surface _overlay;
+	uint16_t *_clearBuf = nullptr;
+	int _clearBufSize = 0;
 	int _cur_fb;
 	QueueHandle_t _fb_num_q;
 	QueueHandle_t _fb_ret_q;

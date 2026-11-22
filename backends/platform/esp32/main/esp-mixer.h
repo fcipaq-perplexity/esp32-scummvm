@@ -27,12 +27,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
-#include "freertos/ringbuf.h"
-#include "bsp/esp-bsp.h"
-#include "esp_codec_dev_defaults.h"
-#include "esp_codec_dev.h"
-#include "driver/i2c_master.h"
-#include "driver/i2s_std.h"
 
 
 class EspMixerManager : public MixerManager {
@@ -59,7 +53,6 @@ public:
 private:
 	static void audioTaskStub(void *arg);
 	void audioTask();
-	esp_codec_dev_handle_t _spk_codec_dev;
 
 
 protected:

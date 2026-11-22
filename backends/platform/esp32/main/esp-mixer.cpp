@@ -28,8 +28,9 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
-
-#define DEFAULT_VOLUME 70
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "tablet_audio.h"
 
 #define TAG "EspMixerManager"
 
@@ -54,7 +55,13 @@ void EspMixerManager::audioTask() {
 		} else {
 			memset(buf, 0, _bufSize);
 		}
-		if (!skip) esp_codec_dev_write(_spk_codec_dev, buf, _bufSize);
+		if (tablet_audio_available()) {
+			//Blocks until the I2S DMA takes the samples; this paces the loop
+			if (!skip) tablet_audio_write(buf, _bufSize);
+		} else {
+			//No audio output on this board: keep the mixer running in real time
+			vTaskDelay(pdMS_TO_TICKS(frame_time_us/1000));
+		}
 	}
 }
 
@@ -72,19 +79,9 @@ void EspMixerManager::init() {
 	_mixer = new Audio::MixerImpl(_freq);
 	assert(_mixer);
 
-	bsp_i2c_init();
-	bsp_audio_init(NULL);
-	_spk_codec_dev=bsp_audio_codec_speaker_init();
-	esp_codec_dev_set_out_vol(_spk_codec_dev, DEFAULT_VOLUME);
-	esp_codec_dev_set_out_mute(_spk_codec_dev, 0);
-	esp_codec_dev_sample_info_t fs = {
-		.bits_per_sample = 16,
-		.channel = 2,
-		.channel_mask = 0,
-		.sample_rate = (uint32_t)_freq,
-		.mclk_multiple = 0,
-	};
-	esp_codec_dev_open(_spk_codec_dev, &fs);
+	//Volume and speaker/headphones are set from the on-board menu settings (tablet_settings)
+	esp_err_t ret=tablet_audio_init(_freq);
+	if (ret!=ESP_OK) ESP_LOGW(TAG, "No audio output (%s)", esp_err_to_name(ret));
 
 	//Audio actually is quite important; let any free core take it.
 	xTaskCreatePinnedToCore(audioTaskStub, "audio", 1024*16, (void*)this, 7, NULL, tskNO_AFFINITY);

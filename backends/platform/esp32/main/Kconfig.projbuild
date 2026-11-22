@@ -1,0 +1,77 @@
+menu "ScummVM tablet"
+
+    config TABLET_ROTATE_270
+        bool "Rotate the picture by 270 degrees (default: 90 degrees counter-clockwise)"
+        default n
+        help
+            The 720x1280 panel is used in landscape (1280x720). The PPA rotates every picture by
+            90 degrees counter-clockwise into the panel. Enable this to turn it the other way round
+            (upside down landscape). Touch coordinates follow automatically.
+
+    config TABLET_UI_TIMEOUT_S
+        int "Close the menu after this many seconds without touch (0 = never)"
+        default 30
+        range 0 600
+
+    config TABLET_MENU_BUTTON_GPIO
+        int "Menu button GPIO (active high, -1 = none)"
+        default 21 if ESP_BOARD_P4_RGB1280_NV3052C_V1_2
+        default -1
+        range -1 54
+        help
+            A press opens or closes the on-board menu (brightness, volume, audio output, turn off).
+
+    config TABLET_POWER_HOLD_GPIO
+        int "GPIO that keeps the board powered (driven high at boot, -1 = none)"
+        default 20 if ESP_BOARD_P4_RGB1280_NV3052C_V1_2
+        default -1
+        range -1 54
+
+    config TABLET_POWER_OFF_GPIO
+        int "GPIO driven high by Turn off (-1 = none)"
+        default 30 if ESP_BOARD_P4_RGB1280_NV3052C_V1_2
+        default -1
+        range -1 54
+        help
+            Board v1.2: GPIO 30 is floated at boot and driven high to switch the board off.
+
+    config TABLET_BATTERY
+        bool "Battery measurement (ADC on GPIO 23, charge status on GPIO 22)"
+        default y if ESP_BOARD_P4_RGB1280_NV3052C_V1_2
+        default n
+
+    config TABLET_AUDIO
+        bool "I2S audio output (NS4168 amplifiers)"
+        default y if ESP_BOARD_P4_RGB1280_NV3052C_V1_2
+        default n
+
+    if TABLET_AUDIO
+
+    config TABLET_AUDIO_GPIO_DATA
+        int "I2S data out GPIO"
+        default 13
+        range 0 54
+
+    config TABLET_AUDIO_GPIO_BCLK
+        int "I2S bit clock GPIO"
+        default 12
+        range 0 54
+
+    config TABLET_AUDIO_GPIO_LRCLK
+        int "I2S word select (LRCLK) GPIO"
+        default 10
+        range 0 54
+
+    config TABLET_AUDIO_GPIO_SPK_EN
+        int "Speaker amplifier enable GPIO (high = on)"
+        default 9
+        range 0 54
+
+    config TABLET_AUDIO_GPIO_HP_EN
+        int "Headphone amplifier enable GPIO (high = on)"
+        default 11
+        range 0 54
+
+    endif
+
+endmenu

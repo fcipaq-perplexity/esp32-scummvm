@@ -3,3 +3,6 @@ sdkconfig.old
 dependencies.lock
 managed_components
 build
+components/gen_bmgr_codes
+components/scummvm/src
+components/scummvm/tmp

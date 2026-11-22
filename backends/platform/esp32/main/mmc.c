@@ -18,21 +18,15 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_check.h"
-#include "esp_spiffs.h"
-#include "esp_lcd_panel_ops.h"
-#include "esp_lcd_mipi_dsi.h"
-#include "esp_ldo_regulator.h"
 #include "esp_vfs_fat.h"
-#include "usb/usb_host.h"
-#include "sd_pwr_ctrl_by_on_chip_ldo.h"
-#include "bsp/esp32_p4_function_ev_board.h"
+#include "driver/sdmmc_host.h"
 #include "blkcache.h"
 #include "esp_check.h"
 #include "ff.h"
 #include "diskio_impl.h"
 #include "sdmmc_cmd.h"
 
-static const char *TAG = "ESP32_P4_EV";
+static const char *TAG = "mmc";
 
 static sdmmc_card_t card;
 static blkcache_handle_t *bc;
@@ -74,22 +68,13 @@ static DRESULT dio_ioctl (unsigned char pdrv, unsigned char cmd, void *buff) {
 	return RES_OK;
 }
 
-void sdcard_mount_blkcache(const char *mountpoint, int files) {
-	sd_pwr_ctrl_ldo_config_t ldo_config = {
-		.ldo_chan_id = 4,
-	};
-	sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
-	esp_err_t ret = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
-	if (ret != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to create a new on-chip LDO power control driver");
-		return;
-	}
-
+bool sdcard_mount_blkcache(const char *mountpoint, int files) {
+	/* The SD pins (GPIO 39..44, IO domain VDD_IO_5) are powered by LDO channel 4, which the
+	 * board's panel_power device has already switched on at 3.3 V before the LCD init. The card
+	 * therefore runs with 3.3 V signalling, no SD power control driver here. */
 	sdmmc_host_t host = SDMMC_HOST_DEFAULT();
 	host.slot = SDMMC_HOST_SLOT_0;
-//	host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
 	host.max_freq_khz =	 SDMMC_FREQ_52M;
-	host.pwr_ctrl_handle = pwr_ctrl_handle;
 	const sdmmc_slot_config_t slot_config = {
 		/* SD card is connected to Slot 0 pins. Slot 0 uses IO MUX, so not specifying the pins here */
 		.cd = SDMMC_SLOT_NO_CD,
@@ -99,7 +84,11 @@ void sdcard_mount_blkcache(const char *mountpoint, int files) {
 	};
 	ESP_ERROR_CHECK(sdmmc_host_init());
 	ESP_ERROR_CHECK(sdmmc_host_init_slot(host.slot, &slot_config));
-	ESP_ERROR_CHECK(sdmmc_card_init(&host, &card));
+	esp_err_t ret = sdmmc_card_init(&host, &card);
+	if (ret != ESP_OK) {
+		ESP_LOGE(TAG, "No SD card or SD card init failed: %s", esp_err_to_name(ret));
+		return false;
+	}
 	sdmmc_card_print_info(stdout, &card);
 
 	blkcache_config_t bcfg={
@@ -137,7 +126,9 @@ void sdcard_mount_blkcache(const char *mountpoint, int files) {
 	FRESULT fr=f_mount(fatfs, drv, 1);
 	if (fr!=FR_OK) {
 		printf("f_mount failed %d\n", fr);
+		return false;
 	}
+	return true;
 }
 
 
