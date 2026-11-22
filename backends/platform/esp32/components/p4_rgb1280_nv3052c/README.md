@@ -43,4 +43,4 @@ This is the bring-up board (UART console). Only the display and the SD card (4-b
 
 - touch (GT911): needs I2C SDA/SCL, INT and RST pins
 - audio: needs codec part number, I2C address/pins, I2S pins and PA enable pin
-- sdkconfig.defaults.board: flash and PSRAM settings, chip revision
+- sdkconfig.defaults.board: PSRAM mode and speed (chip revision v1.0 is set)

@@ -6,3 +6,5 @@ build
 components/gen_bmgr_codes
 components/scummvm/src
 components/scummvm/tmp
+build_dev
+sdkconfig.dev
