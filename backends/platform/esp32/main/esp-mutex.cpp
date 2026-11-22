@@ -22,6 +22,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
 
 
 #define FORBIDDEN_SYMBOL_ALLOW_ALL
@@ -39,16 +41,26 @@ public:
 	bool unlock() override;
 
 private:
+	StaticSemaphore_t *_buf;
 	SemaphoreHandle_t _mutex;
 };
 
 
+//The mutex control block goes to PSRAM: xSemaphoreCreateRecursiveMutex() takes it from internal
+//RAM, which is short on the tablet boards (LCD bounce buffers), and returns NULL when it runs out.
 EspMutexInternal::EspMutexInternal() {
-	_mutex=xSemaphoreCreateRecursiveMutex();
+	_buf=(StaticSemaphore_t*)heap_caps_calloc(1, sizeof(StaticSemaphore_t), MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	if (!_buf) _buf=(StaticSemaphore_t*)heap_caps_calloc(1, sizeof(StaticSemaphore_t), MALLOC_CAP_8BIT);
+	_mutex=_buf ? xSemaphoreCreateRecursiveMutexStatic(_buf) : NULL;
+	if (!_mutex) {
+		ESP_LOGE("EspMutex", "Cannot create mutex: out of memory");
+		abort();
+	}
 }
 
 EspMutexInternal::~EspMutexInternal() {
 	vSemaphoreDelete(_mutex);
+	heap_caps_free(_buf);
 }
 
 bool EspMutexInternal::lock() {

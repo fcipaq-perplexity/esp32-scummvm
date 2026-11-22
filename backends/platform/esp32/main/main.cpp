@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_rom_sys.h"
 #include "posixesp-fs-factory.h"
 
 #define TAG "main"
@@ -263,7 +264,20 @@ static void log_internal_heap(const char *when) {
 		(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA));
 }
 
+//Logs the first failed allocations (size and caps), to find the next memory shortage quickly
+static void alloc_failed_hook(size_t size, uint32_t caps, const char *function_name) {
+	static int count;
+	if (count++ < 10) {
+		esp_rom_printf("Allocation failed: %u bytes, caps 0x%x, in %s (internal free %u, largest %u)\n",
+			(unsigned)size, (unsigned)caps, function_name ? function_name : "?",
+			(unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+			(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+	}
+}
+
 int app_main() {
+	heap_caps_register_failed_alloc_callback(alloc_failed_hook);
+
 	//Keep the board powered after the power button is released
 	tablet_power_hold();
 
