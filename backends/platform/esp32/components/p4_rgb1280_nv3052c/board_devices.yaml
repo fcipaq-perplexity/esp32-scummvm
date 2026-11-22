@@ -50,8 +50,9 @@ devices:
         in_color_format: LCD_COLOR_FMT_RGB565
         out_color_format: LCD_COLOR_FMT_RGB565
         num_fbs: 2
-        # Bounce buffers are required (28800 px = 40 lines): the frame is fed to the LCD from them
-        bounce_buffer_size_px: 28800
+        # Bounce buffers are required: the frame is fed to the LCD from them. 28800 px (40 lines) is
+        # known to work; 14400 px (20 lines) saves 57.6 KiB of internal RAM and is being tested.
+        bounce_buffer_size_px: 14400
         dma_burst_size: 64
         hsync_gpio_num: -1
         vsync_gpio_num: -1

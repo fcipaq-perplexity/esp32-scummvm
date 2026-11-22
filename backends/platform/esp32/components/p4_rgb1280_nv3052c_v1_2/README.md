@@ -57,7 +57,7 @@ GPIO 39..48 of the ESP32-P4 are powered by the IO domain VDD_IO_5. On this board
 
 The LCD controller of the ESP32-P4 cannot count 1280 lines in one frame, so the project overrides the `esp_lcd` component (`components/esp_lcd`, only compatible with ESP-IDF v6.0.x) with a driver that scans out every frame in two halves of 640 lines (reprogrammed vertical timing and a VSYNC timer).
 
-**The panel needs bounce buffers: `bounce_buffer_size_px: 28800` (40 lines) in `board_devices.yaml`.** Do not set it to 0. The driver copies the frame from the PSRAM framebuffers into two internal RAM bounce buffers in its ISR, so `CONFIG_LCD_RGB_ISR_IRAM_SAFE=y` is required; `CONFIG_LCD_RGB_RESTART_IN_VSYNC=y` restarts the GDMA every frame. `sdkconfig.defaults.board` sets both. (`CONFIG_LCD_RGB_SPLIT_FRAME` and `CONFIG_LCD_RGB_SPLIT_FIFO_OFFSET` are left over from an earlier version of the driver; the split is always active in the current one.)
+**The panel needs bounce buffers (`bounce_buffer_size_px` in `board_devices.yaml`).** 28800 (40 lines) is known to work; 14400 (20 lines) saves 57.6 KiB of internal RAM and is being tested. Do not set it to 0. The driver copies the frame from the PSRAM framebuffers into two internal RAM bounce buffers in its ISR, so `CONFIG_LCD_RGB_ISR_IRAM_SAFE=y` is required; `CONFIG_LCD_RGB_RESTART_IN_VSYNC=y` restarts the GDMA every frame. `sdkconfig.defaults.board` sets both. (`CONFIG_LCD_RGB_SPLIT_FRAME` and `CONFIG_LCD_RGB_SPLIT_FIFO_OFFSET` are left over from an earlier version of the driver; the split is always active in the current one.)
 
 ## Reset line (GPIO 54) and start-up order
 

@@ -36,7 +36,7 @@ When you switch boards, delete `sdkconfig` (and preferably run `idf.py fullclean
 defaults. Building takes a while as a lot of ScummVM code is compiled and linked in (the binary is
 more than 10 MiB, flash must be 16 MiB).
 
-The panel needs the LCD bounce buffers (`bounce_buffer_size_px: 28800` in the board's
+The panel needs the LCD bounce buffers (`bounce_buffer_size_px`, 28800 known good, 14400 being tested, in the board's
 `board_devices.yaml`); see `components/p4_rgb1280_nv3052c_v1_2/README.md`.
 
 Preparing the SD card

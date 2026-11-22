@@ -308,8 +308,9 @@ int app_main() {
 	assert(g_system);
 
 	int stack_depth=512*1024;
-	StaticTask_t *taskbuf=(StaticTask_t*)calloc(1, sizeof(StaticTask_t));
-	uint8_t *stackbuf=(uint8_t*)calloc(stack_depth, 1);
+	//The TCB must be in internal RAM (FreeRTOS checks it); the 512 KiB stack lives in PSRAM
+	StaticTask_t *taskbuf=(StaticTask_t*)heap_caps_calloc(1, sizeof(StaticTask_t), MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+	uint8_t *stackbuf=(uint8_t*)heap_caps_calloc(stack_depth, 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 	xTaskCreateStaticPinnedToCore(main_task, "main", stack_depth, NULL, 2, (StackType_t*)stackbuf, taskbuf, 0);
 	return 0;
 }
